@@ -32,4 +32,4 @@ def load(fp):
     return dill.Unpickler(fp).load()
 
 
-all.register_format("dill", dumper=dump, loader=load)
+all.register_format("dill", dumper=dump, loader=load, unsafe=True)

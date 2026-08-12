@@ -33,6 +33,14 @@ FORMATS = {}
 # :type: str -> str
 FORMAT_BY_EXTENSION = {}
 
+#: Formats that can execute arbitrary code while loading (e.g. pickle, dill).
+#: These are never auto-selected from a file extension: a caller must opt in by
+#: passing ``fmt=`` explicitly. This prevents a caller that only intends to read
+#: data (``serialize.load(path)``) from being silently routed to a code-executing
+#: deserializer just because of the file name/extension (CWE-502).
+# :type: set of str
+UNSAFE_FORMATS = set()
+
 #: Map registered classes to the corresponding to_builtin and from_builtin.
 # :type: type -> ClassHelper
 CLASSES = {}
@@ -70,7 +78,15 @@ def _get_format_from_ext(ext):
 
     ext = ext.lower()
     if ext in FORMAT_BY_EXTENSION:
-        return FORMAT_BY_EXTENSION[ext]
+        fmt = FORMAT_BY_EXTENSION[ext]
+        if fmt in UNSAFE_FORMATS:
+            raise ValueError(
+                "'%s' maps to the '%s' format, which can execute arbitrary code "
+                "while loading and therefore is not auto-selected from a file "
+                "extension. If the source is trusted, pass fmt='%s' explicitly."
+                % (ext, fmt, fmt)
+            )
+        return fmt
 
     valid = ", ".join(FORMAT_BY_EXTENSION.keys())
 
@@ -227,6 +243,7 @@ def register_format(
     loader=None,
     extension=MISSING,
     register_class=None,
+    unsafe=False,
 ):
     """Register an available serialization format.
 
@@ -249,6 +266,10 @@ def register_format(
     `serialize.register_class`. When a new format is registered,
     previously registered classes are called. It takes on argument, the
     class to register. See `serialize.yaml.py` for an example.
+
+    `unsafe` should be True for formats that can execute arbitrary code while
+    loading (e.g. pickle, dill). Such formats are never auto-selected from a
+    file extension; the caller must pass `fmt=` explicitly to use them (CWE-502).
     """
 
     # For simplicity. We do not allow to overwrite format.
@@ -303,6 +324,9 @@ def register_format(
         extension = fmt.split(":", 1)[0]
 
     FORMATS[fmt] = Format(extension, dumper, dumpser, loader, loadser, register_class)
+
+    if unsafe:
+        UNSAFE_FORMATS.add(fmt)
 
     if extension and extension not in FORMAT_BY_EXTENSION:
         FORMAT_BY_EXTENSION[extension.lower()] = fmt

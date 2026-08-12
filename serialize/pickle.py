@@ -61,4 +61,4 @@ def load(fp):
     return pickle.Unpickler(fp).load()
 
 
-all.register_format("pickle", dumper=dump, loader=load)
+all.register_format("pickle", dumper=dump, loader=load, unsafe=True)

@@ -9,6 +9,7 @@ from serialize import dump, dumps, load, loads, register_class
 from serialize.all import (
     FORMATS,
     UNAVAILABLE_FORMATS,
+    UNSAFE_FORMATS,
     _get_format,
     _get_format_from_ext,
     register_format,
@@ -125,6 +126,21 @@ def test_file_by_name(fmt):
 
     filename1 = "tmp." + fh.extension
 
+    if fmt in UNSAFE_FORMATS:
+        # code-executing formats are never auto-selected from the extension;
+        # dumping/loading without an explicit fmt must be refused.
+        try:
+            with pytest.raises(ValueError):
+                dump(obj, filename1)
+            dump(obj, filename1, fmt=fmt)
+            assert load(filename1, fmt=fmt) == obj
+            with pytest.raises(ValueError):
+                load(filename1)
+        finally:
+            if os.path.exists(filename1):
+                os.remove(filename1)
+        return
+
     try:
         dump(obj, filename1)
         obj1 = load(filename1)
@@ -152,6 +168,19 @@ def test_file_by_name_pathlib(fmt):
     filename1 = "tmp." + fh.extension
     filename1 = pathlib.Path(filename1)
 
+    if fmt in UNSAFE_FORMATS:
+        try:
+            with pytest.raises(ValueError):
+                dump(obj, filename1)
+            dump(obj, filename1, fmt=fmt)
+            assert load(filename1, fmt=fmt) == obj
+            with pytest.raises(ValueError):
+                load(filename1)
+        finally:
+            if filename1.exists():
+                filename1.unlink()
+        return
+
     try:
         dump(obj, filename1)
         obj1 = load(filename1)
@@ -176,6 +205,11 @@ def test_format_from_ext(fmt):
     if ":" in fmt:
         return
     fh = FORMATS[fmt]
+    if fmt in UNSAFE_FORMATS:
+        # code-executing formats are never auto-selected from a file extension
+        with pytest.raises(ValueError):
+            _get_format_from_ext(fh.extension)
+        return
     assert _get_format_from_ext(fh.extension) == fmt
 
 
